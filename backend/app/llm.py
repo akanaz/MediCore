@@ -568,6 +568,63 @@ Provide ONLY the simplified version, nothing else."""
             logger.error(f"Simplification error: {e}", exc_info=True)
             return "Unable to simplify the text at this time. Please try again."
 
+    async def analyze_health_history(
+        self,
+        query: str,
+        history_text: str,
+        max_tokens: int = 800
+    ) -> str:
+        """
+        Analyze a user's past chat history to answer questions about patterns.
+
+        Args:
+            query: User's question about their health history
+            history_text: Concatenated past messages (truncated)
+            max_tokens: Maximum tokens for response
+
+        Returns:
+            Analysis / insights string
+        """
+        try:
+            prompt = f"""You are analyzing a patient's medical conversation history to answer their question about health patterns and trends.
+
+PAST CONVERSATIONS SUMMARY:
+{history_text}
+
+PATIENT'S QUESTION: {query}
+
+Instructions:
+- Answer only from the information present in the conversations above
+- Identify patterns, frequencies, and trends when relevant
+- If a symptom appears multiple times, note when it was first/last mentioned
+- If no relevant information exists, say so clearly and honestly
+- Be concise and helpful; use bullet points for lists
+- Do NOT invent or assume information not in the history
+- End with a brief recommendation if appropriate
+
+Provide your analysis now:"""
+
+            completion = await self._chat_completion(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a medical assistant analyzing a patient's health history to identify patterns and trends from their past conversations."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.4,
+                max_tokens=max_tokens,
+            )
+
+            result = completion.choices[0].message.content.strip()
+            logger.info("Health history analyzed successfully")
+            return result
+
+        except Exception as e:
+            logger.error(f"Health history analysis error: {e}", exc_info=True)
+            return "Unable to analyze health history at this time. Please try again."
+
     async def translate_text(
         self,
         text: str,

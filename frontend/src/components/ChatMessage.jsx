@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import ConfidenceBadge from "./ConfidenceBadge";
+import TriageBadge from "./TriageBadge";
 
 const ChatMessage = ({ message, formatted, selectedLanguage }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -91,6 +93,13 @@ const ChatMessage = ({ message, formatted, selectedLanguage }) => {
           ))}
         </div>
 
+        {(message.triage || message.confidence) && (
+          <div className="badge-row">
+            {message.triage && <TriageBadge triage={message.triage} />}
+            {message.confidence && <ConfidenceBadge confidence={message.confidence} />}
+          </div>
+        )}
+
         {speechSupported && (
           <div className="message-controls">
             <button
@@ -177,6 +186,12 @@ const ChatMessage = ({ message, formatted, selectedLanguage }) => {
         <div className="message-text lab-interpretation">
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
+        {(message.triage || message.confidence) && (
+          <div className="badge-row">
+            {message.triage && <TriageBadge triage={message.triage} />}
+            {message.confidence && <ConfidenceBadge confidence={message.confidence} />}
+          </div>
+        )}
         {speechSupported && (
           <div className="message-controls">
             <button
@@ -239,6 +254,13 @@ const ChatMessage = ({ message, formatted, selectedLanguage }) => {
       <div className="message-text">
         <ReactMarkdown>{message.content}</ReactMarkdown>
       </div>
+
+      {!isUser && (message.triage || message.confidence) && (
+        <div className="badge-row">
+          {message.triage && <TriageBadge triage={message.triage} />}
+          {message.confidence && <ConfidenceBadge confidence={message.confidence} />}
+        </div>
+      )}
 
       {!isUser && speechSupported && (
         <div className="message-controls">

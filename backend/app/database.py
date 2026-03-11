@@ -19,18 +19,22 @@ class MongoDB:
             raise RuntimeError("MONGODB_URI not found in environment variables")
 
         try:
-            # Create SSL context with certifi CA bundle and relaxed TLS settings
-            # for compatibility with older OpenSSL versions
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
+            # SSL_VERIFY=false in .env disables certificate verification.
+            # Only use this for OpenSSL compatibility issues (older distros).
+            # Default is True (production-safe).
+            ssl_verify = os.getenv("SSL_VERIFY", "true").lower() != "false"
 
-            # Connect with SSL context instead of tlsCAFile
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            if not ssl_verify:
+                logger.warning("⚠ SSL certificate verification DISABLED (SSL_VERIFY=false). Do not use in production.")
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+
             self.client = AsyncIOMotorClient(
                 mongodb_uri,
                 server_api=ServerApi('1'),
                 tls=True,
-                tlsAllowInvalidCertificates=True,
+                tlsAllowInvalidCertificates=not ssl_verify,
                 serverSelectionTimeoutMS=10000,
                 connectTimeoutMS=20000,
                 socketTimeoutMS=20000,

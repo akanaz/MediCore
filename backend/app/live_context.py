@@ -14,7 +14,6 @@ Failures are silently swallowed — the main response is never blocked.
 import asyncio
 import logging
 import re
-import urllib.parse
 from typing import List, Optional
 
 import aiohttp

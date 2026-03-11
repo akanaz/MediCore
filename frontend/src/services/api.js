@@ -261,6 +261,18 @@ export const detectLanguage = async (text) => {
   }
 };
 
+export const getHealthInsights = async (query, daysBack = 90) => {
+  try {
+    const response = await api.post("/api/health-insights", {
+      query,
+      days_back: daysBack,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || "Failed to analyze health history");
+  }
+};
+
 // ==================== HEALTH PROFILE APIs ====================
 
 export const getHealthProfile = async () => {

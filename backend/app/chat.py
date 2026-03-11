@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, EmailStr
 from typing import List, Optional, AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 import json
 from bson import ObjectId
@@ -13,7 +13,7 @@ from slowapi.util import get_remote_address
 from app.llm import llm_service
 from app.retriever import retriever_service
 from app.hybrid_retriever import hybrid_retriever_service
-from app.safety import validate_message, validate_message_async, sanitize_input
+from app.safety import validate_message_async, sanitize_input
 from app.triage import assess_triage_level
 from app.database import db_service
 from app.auth import hash_password, verify_password, create_access_token
@@ -30,7 +30,9 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
-SECRET_KEY = os.getenv("JWT_SECRET", "your-fallback-secret")
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET not found in environment. Please add it to your .env file.")
 ALGORITHM = "HS256"
 
 
@@ -288,6 +290,11 @@ class FeedbackRequest(BaseModel):
     message_index: int = Field(..., ge=0)
     rating: int = Field(..., ge=-1, le=1)  # -1 thumbs down, 1 thumbs up
     comment: Optional[str] = Field(None, max_length=500)
+
+
+class HealthInsightsRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=500)
+    days_back: int = Field(default=90, ge=7, le=365)
 
 
 # ==================== AUTH ENDPOINTS ====================
@@ -1568,6 +1575,64 @@ async def delete_health_profile(user_id: str = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete health profile"
+        )
+
+
+# ==================== HEALTH INSIGHTS ENDPOINT ====================
+
+@router.post("/health-insights")
+@limiter.limit("15/minute")
+async def health_insights(
+    request: Request,
+    body: HealthInsightsRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """Analyze user's past chat history to answer pattern/trend questions."""
+    try:
+        chats_collection = db_service.get_collection("chats")
+        cutoff = datetime.utcnow() - timedelta(days=body.days_back)
+
+        # Fetch up to 50 recent chats for this user within the time window
+        cursor = chats_collection.find(
+            {"user_id": user_id, "created_at": {"$gte": cutoff}},
+            {"messages": 1, "created_at": 1, "title": 1}
+        ).sort("created_at", -1).limit(50)
+        chats = await cursor.to_list(length=50)
+
+        if not chats:
+            return {
+                "insights": "I don't have any chat history for you in the selected time period. Start a conversation and ask your health questions — I'll remember them for future analysis.",
+                "chats_analyzed": 0
+            }
+
+        # Build a condensed history string (oldest first, truncated)
+        lines = []
+        for chat in reversed(chats):
+            date_str = chat.get("created_at", datetime.utcnow()).strftime("%Y-%m-%d")
+            for msg in chat.get("messages", []):
+                role = msg.get("role", "")
+                content = sanitize_input(msg.get("content", ""))[:300].strip()
+                if role in ("user", "assistant") and content:
+                    lines.append(f"[{date_str}] {role.upper()}: {content}")
+
+        # Keep last 300 lines to stay within token limits
+        history_text = "\n".join(lines[-300:])
+
+        insights = await llm_service.analyze_health_history(
+            query=body.query,
+            history_text=history_text
+        )
+
+        logger.info(f"Health insights generated for user: {user_id}, chats: {len(chats)}")
+        return {"insights": insights, "chats_analyzed": len(chats)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Health insights error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to analyze health history"
         )
 
 

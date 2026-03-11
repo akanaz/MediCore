@@ -12,8 +12,9 @@ import ExportChatPDF from "./components/ExportChatPDF";
 import SymptomChecker from "./components/SymptomChecker";
 import LabUploadModal from "./components/LabUploadModal";
 import InteractiveBodyMap from "./components/InteractiveBodyMap";
+import HospitalApp from "./components/hospital/HospitalApp";
+import HospitalLoginScreen from "./components/hospital/HospitalLoginScreen";
 import {
-  sendMessage,
   sendMessageStream,
   sendImageMessage,
   sendLabResults,
@@ -25,6 +26,7 @@ import {
   createNewChat,
   deleteChat as deleteC,
   logout as logoutApi,
+  getHealthInsights,
 } from "./services/api";
 import "./styles/App.css";
 import "./styles/AuthScreen.css";
@@ -41,7 +43,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [showSimplifyFor, setShowSimplifyFor] = useState(null);
   const [simplifying, setSimplifying] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [selectedLanguage, setSelectedLanguage] = useState(() => localStorage.getItem("medicore_lang") || "en");
+  const [showMemoryQuery, setShowMemoryQuery] = useState(false);
+  const [memoryQuery, setMemoryQuery] = useState("");
+  const [memoryLoading, setMemoryLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showHealthProfile, setShowHealthProfile] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -51,6 +56,10 @@ function App() {
   const [labFilePreview, setLabFilePreview] = useState(null);
   const [showLabModal, setShowLabModal] = useState(false);
   const [showBodyMap, setShowBodyMap] = useState(false);
+  const [hospitalUser, setHospitalUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("hospital_user") || "null"); } catch { return null; }
+  });
+  const [showHospitalLogin, setShowHospitalLogin] = useState(false);
   const chatEndRef = useRef(null);
   const imageInputRef = useRef(null);
   const labFileInputRef = useRef(null);
@@ -510,6 +519,42 @@ function App() {
     handleSendMessage(message);
   };
 
+  const handleMemoryQuery = async () => {
+    const query = memoryQuery.trim();
+    if (!query || memoryLoading) return;
+    setMemoryLoading(true);
+    setShowMemoryQuery(false);
+    setMemoryQuery("");
+
+    const userMsg = { role: "user", content: `🧠 ${query}`, id: Date.now() + "-user" };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      if (!currentChatId) {
+        const newChat = await createNewChat();
+        setCurrentChatId(newChat.chat_id);
+        await loadConversations();
+      }
+      const result = await getHealthInsights(query);
+      const assistantMsg = {
+        role: "assistant",
+        content: result.insights,
+        id: Date.now(),
+        isMemoryInsight: true,
+        chatsAnalyzed: result.chats_analyzed,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (error) {
+      console.error("Health insights error:", error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `⚠️ ${t("memory.error")}`, id: Date.now(), isError: true },
+      ]);
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
   const handleLabFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -657,8 +702,29 @@ function App() {
     );
   };
 
+  const handleHospitalLogin = (u) => {
+    setHospitalUser(u);
+    setShowHospitalLogin(false);
+  };
+  const handleHospitalLogout = () => {
+    setHospitalUser(null);
+  };
+
+  if (hospitalUser) {
+    return <HospitalApp user={hospitalUser} onLogout={handleHospitalLogout} />;
+  }
+
+  if (showHospitalLogin) {
+    return (
+      <HospitalLoginScreen
+        onHospitalLogin={handleHospitalLogin}
+        onBack={() => setShowHospitalLogin(false)}
+      />
+    );
+  }
+
   if (!user) {
-    return <AuthScreen onLogin={handleLogin} />;
+    return <AuthScreen onLogin={handleLogin} onShowHospitalLogin={() => setShowHospitalLogin(true)} />;
   }
 
   return (
@@ -800,6 +866,15 @@ function App() {
                   <span>{t("welcome.symptomChecker")}</span>
                   <small>{t("welcome.symptomCheckerDesc")}</small>
                 </button>
+                <button
+                  className="welcome-action-btn"
+                  onClick={() => setShowMemoryQuery(true)}
+                  disabled={loading || memoryLoading}
+                >
+                  <span>🧠</span>
+                  <span>{t("welcome.healthMemory")}</span>
+                  <small>{t("welcome.healthMemoryDesc")}</small>
+                </button>
               </div>
 
             </div>
@@ -930,6 +1005,51 @@ function App() {
             if (labFileInputRef.current) labFileInputRef.current.value = "";
           }}
         />
+      )}
+
+      {/* Health Memory Query Modal */}
+      {showMemoryQuery && (
+        <div className="health-profile-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowMemoryQuery(false); }}>
+          <div className="health-profile-form" style={{ maxWidth: "520px" }}>
+            <div className="profile-header">
+              <h2>🧠 {t("memory.title")}</h2>
+              <button onClick={() => setShowMemoryQuery(false)} className="close-btn" aria-label={t("profile.close")}>&times;</button>
+            </div>
+            <p className="profile-subtitle">{t("memory.subtitle")}</p>
+            <div style={{ margin: "12px 0 8px" }}>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "8px" }}>{t("memory.examples")}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "14px" }}>
+                {[t("memory.ex1"), t("memory.ex2"), t("memory.ex3")].map((ex) => (
+                  <button
+                    key={ex}
+                    onClick={() => setMemoryQuery(ex)}
+                    style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "12px", border: "1px solid var(--border-color)", background: "var(--bg-card)", color: "var(--text-secondary)", cursor: "pointer" }}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <textarea
+              value={memoryQuery}
+              onChange={(e) => setMemoryQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleMemoryQuery(); } }}
+              placeholder={t("memory.placeholder")}
+              rows={3}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--border-color)", background: "var(--bg-tertiary)", color: "var(--text-primary)", fontSize: "0.9rem", resize: "vertical", boxSizing: "border-box" }}
+              autoFocus
+            />
+            <div className="profile-actions" style={{ marginTop: "12px" }}>
+              <button
+                onClick={handleMemoryQuery}
+                disabled={!memoryQuery.trim() || memoryLoading}
+                className="save-btn"
+              >
+                {memoryLoading ? t("memory.analyzing") : t("memory.analyze")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

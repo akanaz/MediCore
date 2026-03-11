@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { signup, login } from "../services/api";
 import "../styles/AuthScreen.css";
 
-function AuthScreen({ onLogin }) {
+function AuthScreen({ onLogin, onShowHospitalLogin }) {
   const { t } = useTranslation();
   const [showAuth, setShowAuth] = useState("login");
   const [email, setEmail] = useState("");
@@ -181,6 +181,12 @@ function AuthScreen({ onLogin }) {
           )}
 
           <p className="disclaimer">{t("auth.disclaimer")}</p>
+
+          {onShowHospitalLogin && (
+            <button className="hospital-portal-link" onClick={onShowHospitalLogin}>
+              🏥 Hospital Staff? Sign in here
+            </button>
+          )}
         </div>
       </div>
     </div>

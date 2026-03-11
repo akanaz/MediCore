@@ -23,7 +23,21 @@
     "pinpointPain": "Pinpoint Pain",
     "pinpointPainDesc": "Show where it hurts on 3D body",
     "symptomChecker": "Symptom Checker",
-    "symptomCheckerDesc": "Step-by-step symptom guide"
+    "symptomCheckerDesc": "Step-by-step symptom guide",
+    "healthMemory": "Health Memory",
+    "healthMemoryDesc": "Ask about your health history"
+  },
+  "memory": {
+    "title": "Health Memory",
+    "subtitle": "Ask MEDICORE about patterns in your past conversations — symptoms that recurred, advice you received, or trends in your health.",
+    "examples": "Try asking:",
+    "ex1": "Have my headaches worsened this month?",
+    "ex2": "What symptoms have I reported before?",
+    "ex3": "What did you suggest last time I had fever?",
+    "placeholder": "Ask about your health history...",
+    "analyze": "Analyze My History",
+    "analyzing": "Analyzing...",
+    "error": "Could not analyze health history. Please try again."
   },
   "input": {
     "placeholder": "Describe your symptoms or reply...",

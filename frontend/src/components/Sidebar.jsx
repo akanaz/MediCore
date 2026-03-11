@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import "../styles/Sidebar.css";
 
@@ -14,12 +14,22 @@ function Sidebar({
   onLogout,
 }) {
   const { t } = useTranslation();
+  const [confirmingId, setConfirmingId] = useState(null);
 
   const handleDelete = (e, chatId) => {
     e.stopPropagation();
-    if (window.confirm(t("sidebar.deleteConfirm"))) {
-      onDeleteChat(chatId);
-    }
+    setConfirmingId(chatId);
+  };
+
+  const handleConfirmDelete = (e, chatId) => {
+    e.stopPropagation();
+    setConfirmingId(null);
+    onDeleteChat(chatId);
+  };
+
+  const handleCancelDelete = (e) => {
+    e.stopPropagation();
+    setConfirmingId(null);
   };
 
   return (
@@ -48,27 +58,37 @@ function Sidebar({
             <div
               key={conv.id}
               className={`conversation-item ${currentConvId === conv.id ? "active" : ""}`}
-              onClick={() => onSelectConversation(conv.id)}
+              onClick={() => confirmingId !== conv.id && onSelectConversation(conv.id)}
               role="button"
               tabIndex={0}
               aria-label={conv.title}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectConversation(conv.id); } }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <span className="conv-title">{conv.title}</span>
-              <button
-                className="delete-chat-btn"
-                onClick={(e) => handleDelete(e, conv.id)}
-                title={t("sidebar.deleteChat")}
-                aria-label={t("sidebar.deleteChat")}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
+              {confirmingId === conv.id ? (
+                <>
+                  <span className="conv-delete-prompt">{t("sidebar.deleteConfirm")}</span>
+                  <button className="conv-confirm-yes" onClick={(e) => handleConfirmDelete(e, conv.id)}>✓</button>
+                  <button className="conv-confirm-no" onClick={handleCancelDelete}>✕</button>
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <span className="conv-title">{conv.title}</span>
+                  <button
+                    className="delete-chat-btn"
+                    onClick={(e) => handleDelete(e, conv.id)}
+                    title={t("sidebar.deleteChat")}
+                    aria-label={t("sidebar.deleteChat")}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </button>
+                </>
+              )}
             </div>
           ))}
           {conversations.length === 0 && (

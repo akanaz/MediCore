@@ -366,6 +366,23 @@
   color: #f85149;
 }
 
+/* Inline delete confirmation (replaces browser confirm dialog) */
+.conv-delete-prompt {
+  flex: 1; font-size: 0.72rem; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.conv-confirm-yes, .conv-confirm-no {
+  flex-shrink: 0; width: 22px; height: 22px;
+  border-radius: 4px; border: none; cursor: pointer;
+  font-size: 0.72rem; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.conv-confirm-yes { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+.conv-confirm-yes:hover { background: rgba(248, 81, 73, 0.3); }
+.conv-confirm-no { background: var(--bg-card); color: var(--text-muted); }
+.conv-confirm-no:hover { background: var(--border-color); color: var(--text-primary); }
+
 .no-conversations {
   text-align: center;
   padding: var(--space-2xl) var(--space-md);

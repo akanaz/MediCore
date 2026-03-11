@@ -4,29 +4,32 @@ import { useGLTF, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { BODY_REGIONS, CATEGORY_COLORS, GUIDE_DOTS, getNearestRegion, normalizeMesh } from "../utils/bodyRegions";
 
-// ─── Quick-select labels ───
-const QUICK_REGIONS = [
-  { label: "Head",         emoji: "🧠" },
-  { label: "Neck",         emoji: "🦴" },
-  { label: "Chest",        emoji: "🫁" },
-  { label: "Heart",        emoji: "❤️" },
-  { label: "Stomach",      emoji: "🫃" },
-  { label: "Lower Back",   emoji: "🦴" },
-  { label: "Back / Spine", emoji: "🦴" },
-  { label: "Arm",          emoji: "💪" },
-  { label: "Knee",         emoji: "🦵" },
-  { label: "Leg",          emoji: "🦵" },
-  { label: "Foot",         emoji: "🦶" },
-  { label: "Pelvis",       emoji: "🩻" },
-];
+// Category display order and labels
+const CATEGORY_ORDER = ["head", "neck", "torso", "back", "arm", "pelvis", "leg", "skin"];
+const CATEGORY_LABELS = {
+  head:   "Head & Face",
+  neck:   "Neck & Throat",
+  torso:  "Chest & Abdomen",
+  back:   "Back & Spine",
+  arm:    "Shoulder & Arm",
+  pelvis: "Pelvis & Hip",
+  leg:    "Leg & Foot",
+  skin:   "Skin",
+};
 
 // Camera positions: model front is at -Z (after normalizeMesh -90° X rotation)
-// Camera at -Z looks toward +Z and sees the front (chest/face) of the model
 const VIEW_PRESETS = {
-  front: [0, 0, -3.8],  // see front: face, chest, abdomen
-  back:  [0, 0,  3.8],  // see back: spine, shoulder blades
+  front: [0, 0, -3.8],
+  back:  [0, 0,  3.8],
   left:  [ 3.8, 0, 0],
   right: [-3.8, 0, 0],
+};
+
+const VIEW_PRESET_META = {
+  front: { label: "Front", key: "1", title: "Front view (press 1)" },
+  back:  { label: "Back",  key: "2", title: "Back view (press 2)" },
+  left:  { label: "Left",  key: "3", title: "Left view (press 3)" },
+  right: { label: "Right", key: "4", title: "Right view (press 4)" },
 };
 
 // ──────────────────────────────────────────────
@@ -68,11 +71,10 @@ function PulsingMarker({ position }) {
 }
 
 // ──────────────────────────────────────────────
-// HOVER INDICATOR — colored sphere only, NO Html label
-// (label shown in the 2D side panel, not blocking the 3D model)
+// HOVER INDICATOR
 // ──────────────────────────────────────────────
 function HoverMarker({ position, category }) {
-  const color = CATEGORY_COLORS[category] || "#00d4ff";
+  const color = CATEGORY_COLORS[category] || "#58a6ff";
   return (
     <group position={position}>
       <mesh>
@@ -94,7 +96,7 @@ function HoverMarker({ position, category }) {
 }
 
 // ──────────────────────────────────────────────
-// GUIDE DOTS — non-interactive visual cues showing major regions
+// GUIDE DOTS
 // ──────────────────────────────────────────────
 function GuideDots({ selectedLabel }) {
   return (
@@ -125,7 +127,7 @@ function GuideDots({ selectedLabel }) {
 }
 
 // ──────────────────────────────────────────────
-// CAMERA CONTROLLER — handles view presets
+// CAMERA CONTROLLER
 // ──────────────────────────────────────────────
 function CameraController({ view, controlsRef }) {
   const { camera } = useThree();
@@ -209,16 +211,9 @@ function ClickableBodyMesh({ onSelect, selectedRegion, canClick, onHover }) {
         onPointerLeave={handlePointerLeave}
         onClick={handleClick}
       />
-
-      {/* Hover marker — colored sphere only, no floating text label */}
       {hovered && !isHoverSameAsSelected && (
-        <HoverMarker
-          position={hovered.pos}
-          category={hovered.category}
-        />
+        <HoverMarker position={hovered.pos} category={hovered.category} />
       )}
-
-      {/* Selected region — pulsing red marker only, no floating HTML */}
       {selectedRegion && (
         <PulsingMarker position={selectedRegion.pos} />
       )}
@@ -226,7 +221,7 @@ function ClickableBodyMesh({ onSelect, selectedRegion, canClick, onHover }) {
   );
 }
 
-// Spinning wireframe cube shown while GLB loads
+// Simple CSS loading indicator (shown while GLB loads)
 function LoadingCube() {
   const ref = useRef();
   useFrame((_, delta) => {
@@ -235,7 +230,7 @@ function LoadingCube() {
   return (
     <mesh ref={ref}>
       <boxGeometry args={[0.18, 0.18, 0.18]} />
-      <meshStandardMaterial color="#00d4ff" wireframe />
+      <meshStandardMaterial color="#58a6ff" wireframe />
     </mesh>
   );
 }
@@ -250,9 +245,69 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
   const [details, setDetails] = useState("");
   const [viewPreset, setViewPreset] = useState("front");
   const [hoveredRegion, setHoveredRegion] = useState(null);
+  const [regionSearch, setRegionSearch] = useState("");
+  const [isFlashing, setIsFlashing] = useState(false);
 
   const canClick = useRef(true);
   const controlsRef = useRef();
+  const prevSelectedRef = useRef(null);
+  const searchInputRef = useRef();
+
+  // Keyboard navigation: 1-4 = view presets, Escape = close
+  useEffect(() => {
+    const handler = (e) => {
+      // Don't intercept keys if user is typing in an input/textarea
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "1") setViewPreset("front");
+      else if (e.key === "2") setViewPreset("back");
+      else if (e.key === "3") setViewPreset("left");
+      else if (e.key === "4") setViewPreset("right");
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  // Flash feedback when a region is selected
+  useEffect(() => {
+    if (selected && selected !== prevSelectedRef.current) {
+      prevSelectedRef.current = selected;
+      setIsFlashing(true);
+      const t = setTimeout(() => setIsFlashing(false), 420);
+      return () => clearTimeout(t);
+    }
+  }, [selected]);
+
+  // Deduplicate BODY_REGIONS by label
+  const uniqueRegions = useMemo(() => {
+    const seen = new Set();
+    return BODY_REGIONS.filter((r) => {
+      if (seen.has(r.label)) return false;
+      seen.add(r.label);
+      return true;
+    });
+  }, []);
+
+  // Filter regions by search query
+  const filteredRegions = useMemo(() => {
+    const q = regionSearch.trim().toLowerCase();
+    if (!q) return uniqueRegions;
+    return uniqueRegions.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        r.kw.some((k) => k.toLowerCase().includes(q))
+    );
+  }, [uniqueRegions, regionSearch]);
+
+  // Group filtered regions by category
+  const groupedRegions = useMemo(() => {
+    const groups = {};
+    for (const cat of CATEGORY_ORDER) {
+      const regions = filteredRegions.filter((r) => r.category === cat);
+      if (regions.length) groups[cat] = regions;
+    }
+    return groups;
+  }, [filteredRegions]);
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) onClose();
@@ -273,19 +328,16 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
 
   const canConsult = selected || details.trim().length > 0;
 
-  const handleQuickSelect = (label) => {
-    const region = BODY_REGIONS.find((r) => r.label === label);
-    if (region) setSelected(region);
+  const handleRegionSelect = (region) => {
+    setSelected(region);
   };
 
-  // Category color for selected region
   const selectedColor = selected
-    ? CATEGORY_COLORS[selected.category] || "#00d4ff"
+    ? CATEGORY_COLORS[selected.category] || "#58a6ff"
     : null;
 
-  // Category color for hovered region
   const hoverColor = hoveredRegion
-    ? CATEGORY_COLORS[hoveredRegion.category] || "#00d4ff"
+    ? CATEGORY_COLORS[hoveredRegion.category] || "#58a6ff"
     : null;
 
   return (
@@ -321,7 +373,7 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
               <ambientLight intensity={0.50} />
               <directionalLight position={[2, 4, -3]} intensity={0.90} />
               <directionalLight position={[-2, 1, 1]} intensity={0.28} color="#4488bb" />
-              <pointLight position={[0, 1.5, -2.5]} intensity={0.40} color="#00d4ff" />
+              <pointLight position={[0, 1.5, -2.5]} intensity={0.40} color="#58a6ff" />
               <pointLight position={[0, -1, -1.5]} intensity={0.18} color="#7755ff" />
 
               <CameraController view={viewPreset} controlsRef={controlsRef} />
@@ -329,7 +381,7 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
               <Suspense fallback={<LoadingCube />}>
                 <GuideDots selectedLabel={selected?.label} />
                 <ClickableBodyMesh
-                  onSelect={setSelected}
+                  onSelect={handleRegionSelect}
                   selectedRegion={selected}
                   canClick={canClick}
                   onHover={setHoveredRegion}
@@ -348,33 +400,32 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
 
             {/* View preset buttons overlaid top-left of canvas */}
             <div className="ibm-view-btns">
-              {Object.keys(VIEW_PRESETS).map((v) => (
+              {Object.entries(VIEW_PRESET_META).map(([v, meta]) => (
                 <button
                   key={v}
                   className={`ibm-view-btn${viewPreset === v ? " active" : ""}`}
                   onClick={() => setViewPreset(v)}
+                  title={meta.title}
+                  aria-label={meta.title}
                 >
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                  {meta.label}
                 </button>
               ))}
             </div>
 
             <p className="ibm-canvas-hint">
-              🖱 Drag to rotate · Scroll to zoom · <strong>Click to select</strong>
+              🖱 Drag · Scroll zoom · <strong>Click to select</strong>
             </p>
           </div>
 
           {/* ── Side controls ── */}
           <div className="ibm-controls">
 
-            {/* Hover status — shows what the cursor is pointing at */}
+            {/* Hover status */}
             <div className="ibm-hover-status">
               {hoveredRegion ? (
                 <div className="ibm-hover-active">
-                  <span
-                    className="ibm-category-dot"
-                    style={{ background: hoverColor }}
-                  />
+                  <span className="ibm-category-dot" style={{ background: hoverColor }} />
                   <span className="ibm-hover-region-name">{hoveredRegion.label}</span>
                 </div>
               ) : (
@@ -382,18 +433,15 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
               )}
             </div>
 
-            {/* Selected region display */}
+            {/* Selected region display with flash */}
             <div
-              className="ibm-selection-box"
+              className={`ibm-selection-box${isFlashing ? " ibm-flash-active" : ""}`}
               style={selectedColor ? { borderColor: selectedColor + "55" } : {}}
             >
               {selected ? (
                 <>
                   <div className="ibm-selected-row">
-                    <span
-                      className="ibm-category-dot"
-                      style={{ background: selectedColor }}
-                    />
+                    <span className="ibm-category-dot" style={{ background: selectedColor }} />
                     <span className="ibm-selected-name">{selected.label}</span>
                     <button
                       className="ibm-deselect"
@@ -403,14 +451,12 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
                       ✕
                     </button>
                   </div>
-                  <p className="ibm-selected-hint">
-                    Add details below or start consultation
-                  </p>
+                  <p className="ibm-selected-hint">Add details below or start consultation</p>
                 </>
               ) : (
                 <p className="ibm-no-selection">
-                  No region selected yet.<br />
-                  <span>Click the 3D body or use quick-select below</span>
+                  No region selected.<br />
+                  <span>Click the 3D model or search below</span>
                 </p>
               )}
             </div>
@@ -422,7 +468,7 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
               </label>
               <textarea
                 className="ibm-textarea"
-                rows={3}
+                rows={2}
                 placeholder={
                   selected
                     ? `e.g., sharp pain in my ${selected.label} for 2 days, worse at night…`
@@ -433,35 +479,71 @@ export default function InteractiveBodyMap({ onClose, onConsult }) {
               />
             </div>
 
-            {/* Quick-select buttons */}
+            {/* Region search + full list */}
             <div className="ibm-quick-section">
-              <p className="ibm-quick-label">Quick-select a region:</p>
-              <div className="ibm-quick-grid">
-                {QUICK_REGIONS.map(({ label, emoji }) => {
-                  const region = BODY_REGIONS.find((r) => r.label === label);
-                  const catColor = region ? CATEGORY_COLORS[region.category] : null;
-                  return (
-                    <button
-                      key={label}
-                      className={`ibm-quick-btn${selected?.label === label ? " active" : ""}`}
-                      style={selected?.label === label && catColor
-                        ? { background: catColor + "22", borderColor: catColor, color: catColor }
-                        : {}}
-                      onClick={() => handleQuickSelect(label)}
+              <div className="ibm-search-wrap">
+                <input
+                  ref={searchInputRef}
+                  className="ibm-search-box"
+                  type="text"
+                  placeholder="Search region (e.g. knee, chest)…"
+                  value={regionSearch}
+                  onChange={(e) => setRegionSearch(e.target.value)}
+                  aria-label="Search body region"
+                />
+                {regionSearch && (
+                  <button
+                    className="ibm-search-clear"
+                    onClick={() => { setRegionSearch(""); searchInputRef.current?.focus(); }}
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="ibm-region-list">
+                {Object.keys(groupedRegions).length === 0 && (
+                  <p className="ibm-no-results">No regions match "{regionSearch}"</p>
+                )}
+                {Object.entries(groupedRegions).map(([cat, regions]) => (
+                  <div key={cat} className="ibm-region-group">
+                    <div
+                      className="ibm-region-group-header"
+                      style={{ color: CATEGORY_COLORS[cat] }}
                     >
-                      <span className="ibm-quick-emoji">{emoji}</span>
-                      {label}
-                    </button>
-                  );
-                })}
+                      {CATEGORY_LABELS[cat]}
+                      <span className="ibm-region-count">{regions.length}</span>
+                    </div>
+                    <div className="ibm-region-group-btns">
+                      {regions.map((region) => {
+                        const catColor = CATEGORY_COLORS[region.category];
+                        const isActive = selected?.label === region.label;
+                        return (
+                          <button
+                            key={region.label}
+                            className={`ibm-quick-btn${isActive ? " active" : ""}`}
+                            style={isActive && catColor
+                              ? { background: catColor + "22", borderColor: catColor, color: catColor }
+                              : {}}
+                            onClick={() => handleRegionSelect(region)}
+                          >
+                            {region.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
+            {/* Keyboard hint */}
+            <p className="ibm-kb-hint">Keys 1–4 to switch views · Esc to close</p>
+
             {/* Action buttons */}
             <div className="ibm-actions">
-              <button className="ibm-btn-cancel" onClick={onClose}>
-                Cancel
-              </button>
+              <button className="ibm-btn-cancel" onClick={onClose}>Cancel</button>
               <button
                 className="ibm-btn-consult"
                 onClick={handleConsult}

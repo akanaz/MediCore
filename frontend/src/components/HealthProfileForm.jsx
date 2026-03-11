@@ -13,6 +13,7 @@ const HealthProfileForm = ({ onClose }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -72,7 +73,8 @@ const HealthProfileForm = ({ onClose }) => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(t('profile.deleteConfirm'))) return;
+    if (!showDeleteConfirm) { setShowDeleteConfirm(true); return; }
+    setShowDeleteConfirm(false);
     try {
       await deleteHealthProfile();
       setProfile({ age: '', sex: '', height_cm: '', weight_kg: '', blood_type: '', known_conditions: '', current_medications: '', allergies: '', family_history: '', smoking: '', alcohol: '', exercise: '' });
@@ -208,9 +210,17 @@ const HealthProfileForm = ({ onClose }) => {
           <button onClick={handleSave} disabled={saving} className="save-btn">
             {saving ? t('profile.saving') : t('profile.save')}
           </button>
-          <button onClick={handleDelete} className="delete-btn">
-            {t('profile.delete')}
-          </button>
+          {showDeleteConfirm ? (
+            <div className="delete-confirm-row">
+              <span className="delete-confirm-text">{t('profile.deleteConfirm')}</span>
+              <button onClick={handleDelete} className="delete-btn delete-confirm-yes">{t('profile.delete')} ✓</button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="delete-confirm-cancel">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={handleDelete} className="delete-btn">
+              {t('profile.delete')}
+            </button>
+          )}
         </div>
       </div>
     </div>

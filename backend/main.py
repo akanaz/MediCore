@@ -17,6 +17,7 @@ load_dotenv()
 
 # Import routers and services
 from app.chat import router as chat_router
+from app.hospital import hospital_router
 from app.retriever import retriever_service
 from app.hybrid_retriever import hybrid_retriever_service
 from app.database import db_service
@@ -110,6 +111,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat_router, prefix="/api", tags=["chat"])
+app.include_router(hospital_router)
 
 
 @app.get("/")

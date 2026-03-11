@@ -5,7 +5,6 @@ Two-tier emergency detection + mental health pathway.
 
 import logging
 import re
-import asyncio
 from typing import Tuple, Optional
 
 logger = logging.getLogger(__name__)
@@ -188,17 +187,6 @@ def check_mental_health(message: str) -> bool:
         if indicator in message_lower:
             return True
     return False
-
-
-def check_emergency(message: str) -> Tuple[bool, str]:
-    """
-    Tier 1 only emergency check (synchronous, for backwards compatibility).
-    Use check_emergency_tiered() for the full two-tier system.
-    """
-    if check_emergency_keywords(message):
-        logger.warning("⚠ Emergency keyword detected (Tier 1)")
-        return True, EMERGENCY_RESPONSE
-    return False, ""
 
 
 async def check_emergency_tiered(message: str, llm_service) -> Tuple[bool, str]:
